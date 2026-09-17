@@ -1,0 +1,26 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: audit-host-network
+  annotations:
+    policies.kyverno.io/title: Audit Host Network
+    policies.kyverno.io/category: Pod Security
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/description: >-
+      Detect workloads using hostNetwork without initially blocking them.
+      This policy is used to demonstrate audit-before-enforce.
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: disallow-host-network
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      validate:
+        message: "hostNetwork is not allowed for standard workloads."
+        pattern:
+          spec:
+            =(hostNetwork): false

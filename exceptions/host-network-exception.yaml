@@ -1,0 +1,19 @@
+apiVersion: kyverno.io/v2
+kind: PolicyException
+metadata:
+  name: host-network-exception
+  namespace: default
+spec:
+  exceptions:
+    - policyName: audit-host-network
+      ruleNames:
+        - disallow-host-network
+  match:
+    any:
+      - resources:
+          kinds:
+            - Pod
+          namespaces:
+            - default
+          names:
+            - host-network-exception
