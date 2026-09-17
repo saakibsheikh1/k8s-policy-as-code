@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ci-policy-violation
+  labels:
+    app: ci-test
+    environment: test
+spec:
+  containers:
+    - name: nginx
+      image: nginx:latest
+      securityContext:
+        privileged: true
+        capabilities:
+          add:
+            - NET_ADMIN
+      resources: {}

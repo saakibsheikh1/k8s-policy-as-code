@@ -1,0 +1,50 @@
+name: Kyverno Policy Validation
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions: {}
+
+jobs:
+  policy-validation:
+    name: Validate Kubernetes manifests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Kyverno CLI
+        uses: kyverno/action-install-cli@v0.2.0
+        with:
+          release: v1.19.1
+
+      - name: Check Kyverno CLI
+        run: kyverno version
+
+      - name: Verify violating workload is rejected
+        shell: bash
+        run: |
+          set +e
+          kyverno apply policies/ \
+            --resource ci/test-manifests/violation.yaml \
+            > violation-output.txt 2>&1
+          EXIT_CODE=True
+          cat violation-output.txt
+
+          if [ "" -eq 0 ]; then
+            echo "ERROR: Violating manifest unexpectedly passed policy validation."
+            exit 1
+          fi
+
+          echo "PASS: Violating manifest was rejected by policy validation."
+
+      - name: Verify compliant workload is admitted
+        run: |
+          kyverno apply policies/ \
+            --resource ci/test-manifests/compliant.yaml
+
+          echo "PASS: Compliant manifest passed policy validation."
