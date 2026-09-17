@@ -6,17 +6,17 @@
 ![Kyverno](https://img.shields.io/badge/Kyverno-1.19.1-green)
 ![AWS](https://img.shields.io/badge/AWS-EKS-orange)
 ![Policy%20as%20Code](https://img.shields.io/badge/Policy--as--Code-Enabled-purple)
-![CI](https://img.shields.io/badge/CI-GitHub%20Actions-black)
+![GitHub%20Actions](https://img.shields.io/badge/CI-GitHub%20Actions-black)
 
 ---
 
-## 1. Project Overview
+# 1. Project Overview
 
-This project implements a Kubernetes security and policy-as-code framework on Amazon EKS using Kyverno.
+This project implements a Kubernetes security and Policy-as-Code framework on Amazon EKS using Kyverno.
 
-The objective is to prevent insecure Kubernetes workloads from entering the cluster by enforcing security policies at admission time and validating manifests in CI before deployment.
+The primary objective is to prevent insecure Kubernetes workloads from entering the cluster by enforcing security policies at admission time and validating Kubernetes manifests in CI before deployment.
 
-The project implements controls for:
+The project implements security controls for:
 
 - Privileged container prevention
 - Non-root container execution
@@ -25,17 +25,37 @@ The project implements controls for:
 - Image tag restrictions
 - Required workload labels
 - Approved container registry enforcement
-- Audit-to-Enforce policy rollout
+- Audit-before-enforce policy rollout
 - Policy violation reporting
 - Admission monitoring
 - Rejection-spike alert demonstration
 - CI policy validation
 - Combined CI and Kubernetes admission guardrails
-- Security research and operational runbook
+- Security research
+- Deployment troubleshooting runbook
+- Runtime security limitations
 
 ---
 
-# 2. Architecture
+# 2. Project Objectives
+
+The project was designed around the following security objectives:
+
+1. Install and configure a Kubernetes admission policy engine.
+2. Prevent privileged workloads.
+3. Enforce Pod security requirements.
+4. Restrict container images to an approved registry.
+5. Demonstrate audit-before-enforce deployment.
+6. Demonstrate admission rejection of insecure workloads.
+7. Validate policies through CI.
+8. Monitor admission and policy activity.
+9. Demonstrate rejection-spike alerting.
+10. Document security architecture and operational procedures.
+11. Clean up all temporary AWS resources after testing.
+
+---
+
+# 3. Architecture
 
 ```text
                          Developer
@@ -78,37 +98,74 @@ The project implements controls for:
                  Policy Reports
                          |
                          v
-                 Kyverno Metrics
+                  Kyverno Metrics
                          |
                          v
                   Alert / Monitoring
-3. Technology Stack
+4. Security Model
+
+The project uses two primary enforcement layers.
+
+Layer 1 — CI
+Developer
+    |
+    v
+Pull Request
+    |
+    v
+GitHub Actions
+    |
+    v
+Kyverno CLI
+    |
+    +---- Violation ----> CI FAIL
+    |
+    +---- Compliant ----> CI PASS
+Layer 2 — Kubernetes Admission
+Deployment
+    |
+    v
+Kubernetes API Server
+    |
+    v
+Kyverno
+    |
+    +---- Violation ----> REQUEST DENIED
+    |
+    +---- Compliant ----> REQUEST ACCEPTED
+
+This creates a defense-in-depth security model.
+
+5. Technology Stack
 Technology	Purpose
-Amazon EKS	Managed Kubernetes cluster
-Kyverno	Kubernetes-native policy engine
+Amazon EKS	Managed Kubernetes platform
 Kubernetes	Container orchestration
+Kyverno	Kubernetes-native Policy-as-Code engine
 Amazon ECR	Approved container image registry
 GitHub	Source control
 GitHub Actions	CI policy validation
-Kyverno CLI	Manifest policy validation
-PowerShell	Local administration and testing
+Kyverno CLI	Kubernetes manifest policy validation
+Helm	Kyverno installation
 AWS CLI	AWS resource management
-Helm	Kyverno installation and configuration
-4. Environment
+PowerShell	Local testing and administration
+6. Environment
 
-The implementation was performed using:
+The project was implemented in the following environment:
 
 Cloud Provider: AWS
+Region: ap-south-1
 Kubernetes Platform: Amazon EKS
-AWS Region: ap-south-1
 Cluster: k8s-policy-as-code
 Node Group: policy-workers
 Node Instance Type: t3.small
 Policy Engine: Kyverno v1.19.1
+Approved Registry: Amazon ECR
 
-The cluster was created specifically for this security-policy laboratory project.
+The EKS cluster and node group were created specifically for this laboratory project.
 
-5. Repository Structure
+After testing was completed, the EKS cluster, node group, and ECR repository were deleted.
+
+7. Repository Structure
 k8s-policy-as-code/
 │
 ├── .github/
@@ -143,67 +200,68 @@ k8s-policy-as-code/
 │   └── screenshots/
 │
 └── README.md
-6. Stage 1 — Admission Control
+8. Stage 1 — Admission Control
 Objective
 
 Install Kyverno on Amazon EKS and prevent privileged containers from being admitted into the cluster.
 
-Implementation
-
-Kyverno was installed using Helm.
-
-The first admission policy prevents privileged containers:
-
+Policy
 policies/disallow-privileged.yaml
 
-Policy behavior:
+The policy prevents containers from using:
 
-Privileged container
-        |
-        v
+securityContext:
+  privileged: true
+Admission Behavior
+Privileged Pod
+      |
+      v
 Kubernetes API Server
-        |
-        v
+      |
+      v
 Kyverno
-        |
-        v
+      |
+      v
 REJECT
 
-A compliant workload is allowed:
+A compliant workload follows:
 
-Compliant workload
-        |
-        v
+Compliant Pod
+      |
+      v
+Kubernetes API Server
+      |
+      v
 Kyverno
-        |
-        v
+      |
+      v
 ALLOW
-Test Results
-Violating workload
+Test
 
-A Pod containing:
+A Pod with:
 
 securityContext:
   privileged: true
 
-was rejected.
+was submitted.
 
-Expected rejection message:
+Result:
+
+REJECTED
+
+Expected policy message:
 
 Privileged containers are not allowed.
-Compliant workload
 
-A non-privileged workload was admitted successfully and subsequently removed after testing.
+A compliant workload was subsequently admitted successfully.
 
 Result
-
 Stage 1: COMPLETE
+9. Stage 2 — Pod Security Policies
 
-7. Stage 2 — Pod Security Policies
+Stage 2 introduced multiple security controls.
 
-Stage 2 extends the admission control layer with multiple security policies.
-
-7.1 Require Non-Root
+9.1 Require Non-Root
 
 File:
 
@@ -216,15 +274,15 @@ securityContext:
 
 Purpose:
 
-Prevent containers from running as root
-Reduce the impact of container compromise
-Support least-privilege execution
+Prevent containers from running as root.
+Reduce the impact of container compromise.
+Support least-privilege execution.
 
-A violating workload was rejected.
+Test result:
 
-A compliant workload was admitted.
-
-7.2 Drop Linux Capabilities
+Violation: REJECTED
+Compliant workload: ADMITTED
+10. Drop Dangerous Capabilities
 
 File:
 
@@ -239,20 +297,20 @@ securityContext:
 
 Purpose:
 
-Reduce unnecessary Linux privileges
-Minimize container attack surface
+Reduce Linux container privileges.
+Minimize the attack surface of compromised containers.
 
-A violating workload was rejected.
+Test result:
 
-A compliant workload was admitted.
-
-7.3 Require CPU and Memory Resources
+Violation: REJECTED
+Compliant workload: ADMITTED
+11. Require Resource Requests and Limits
 
 File:
 
 policies/require-resources.yaml
 
-Required fields:
+Required configuration:
 
 resources:
   requests:
@@ -264,39 +322,39 @@ resources:
 
 Purpose:
 
-Improve scheduling predictability
-Prevent uncontrolled resource consumption
-Improve resource isolation
+Improve scheduling predictability.
+Improve resource isolation.
+Prevent uncontrolled resource consumption.
 
-A workload without the required resources was rejected.
+Test result:
 
-A compliant workload was admitted.
-
-7.4 Disallow latest Image Tag
+Violation: REJECTED
+Compliant workload: ADMITTED
+12. Disallow latest Image Tag
 
 File:
 
 policies/disallow-latest-tag.yaml
 
-Example prohibited image:
+Prohibited:
 
 nginx:latest
 
-Example accepted image:
+Accepted example:
 
 nginx:1.27
 
 Purpose:
 
-Avoid mutable image references
-Improve deployment reproducibility
-Reduce ambiguity about which image version is deployed
+Avoid mutable image references.
+Improve deployment reproducibility.
+Make deployed image versions explicit.
 
-A latest image was rejected.
+Test result:
 
-A versioned image was admitted.
-
-7.5 Require Workload Labels
+latest image: REJECTED
+versioned image: ADMITTED
+13. Require Workload Labels
 
 File:
 
@@ -304,122 +362,130 @@ policies/require-labels.yaml
 
 Required labels:
 
-labels:
-  app: ...
-  environment: ...
+metadata:
+  labels:
+    app: example
+    environment: production
 
 Purpose:
 
-Improve workload identification
-Support operational management
-Enable policy targeting
-Improve resource organization
+Improve workload identification.
+Improve resource management.
+Support policy targeting.
+Improve operational organization.
 
-Workloads missing required labels were rejected.
+Test result:
 
-Compliant workloads were admitted.
+Missing labels: REJECTED
+Required labels: ADMITTED
+14. Stage 2 Summary
 
-Stage 2 Result
-
-The following controls were implemented and tested:
+Implemented security controls:
 
 [✓] Require non-root
-[✓] Drop dangerous capabilities
-[✓] Require CPU/memory requests and limits
+[✓] Drop all Linux capabilities
+[✓] Require CPU requests
+[✓] Require memory requests
+[✓] Require CPU limits
+[✓] Require memory limits
 [✓] Disallow latest image tag
 [✓] Require app label
 [✓] Require environment label
 
-Stage 2: COMPLETE
+Result:
 
-8. Stage 3 — Image and Supply-Chain Policy
+Stage 2: COMPLETE
+15. Stage 3 — Image and Supply-Chain Security
 Objective
 
-Restrict workloads to images originating from an approved container registry.
-
-Amazon ECR was selected as the approved registry for this project.
-
-8.1 Approved ECR Repository
-
-Repository:
-
-k8s-policy-demo
-
-Approved registry:
-
-495278513365.dkr.ecr.ap-south-1.amazonaws.com/k8s-policy-demo
+Restrict container images to an approved Amazon ECR repository.
 
 Policy:
 
 policies/require-approved-registry.yaml
-8.2 Public Registry Test
+
+Approved repository:
+
+k8s-policy-demo
+
+Approved image registry:
+
+495278513365.dkr.ecr.ap-south-1.amazonaws.com/k8s-policy-demo
+16. Public Registry Rejection
 
 A public Docker Hub image was tested:
 
 nginx:1.27
 
-The image was rejected by Kyverno because it did not originate from the approved ECR registry.
+The image did not originate from the approved ECR repository.
 
-Expected result:
+Result:
+
+REJECTED
+
+Expected message:
 
 Images must come from the approved ECR registry.
-8.3 Approved ECR Image
+17. Approved ECR Image
 
 The image was tagged and pushed to ECR:
 
 495278513365.dkr.ecr.ap-south-1.amazonaws.com/k8s-policy-demo:1.27
 
-The ECR image was successfully admitted when used by a compliant Pod.
+A compliant Pod using the approved ECR image was admitted.
 
-8.4 ECR Scan-on-Push
+Result:
 
-ECR scan-on-push was enabled for the repository.
+Approved ECR image: ADMITTED
+18. ECR Image Scanning
 
-The project therefore provides:
+ECR scan-on-push was enabled for:
 
-Approved registry enforcement
-        +
-ECR image scanning configuration
+k8s-policy-demo
+
+This provides image scanning configuration at the registry level.
+
 Important Limitation
 
-This project did not implement an admission rule that blocks an image based on:
+The project did not implement an admission policy that blocks images based on:
 
-Image signature verification
 Vulnerability scan severity
-Scan findings
+ECR scan findings
+Image signature verification
 
 Therefore, the project does not claim complete signature-based or vulnerability-result-based admission enforcement.
 
-The demonstrated control is:
+The demonstrated supply-chain control is:
 
-Unapproved registry
+Unapproved Registry
         |
         v
       DENY
 
 and:
 
-Approved ECR registry
+Approved ECR Registry
         |
         v
       ALLOW
 
-Stage 3: COMPLETE with documented supply-chain limitation
+Result:
 
-9. Stage 4 — Audit Before Enforce
+Stage 3: COMPLETE
+with documented scan/signature limitation
+19. Stage 4 — Audit Before Enforce
 Objective
 
-Demonstrate how a new restrictive policy can be introduced in Audit mode before being converted to Enforce mode.
+Demonstrate a safe rollout approach where a new security rule is first evaluated in Audit mode before being switched to Enforce mode.
 
 Policy:
 
 policies/audit-host-network.yaml
 
-The policy controls:
+The policy prevents standard workloads from using:
 
-spec:
-  hostNetwork: false
-9.1 Audit Mode
+hostNetwork: true
+20. Audit Mode
 
 The policy was initially configured with:
 
@@ -431,62 +497,90 @@ hostNetwork: true
 
 was allowed to enter the cluster.
 
-However, Kyverno recorded the violation in PolicyReports.
+The violation was recorded through Kyverno policy reporting.
 
-Example observation:
+This demonstrated:
 
-PASS: 8
-FAIL: 1
+New Policy
+    |
+    v
+Audit Mode
+    |
+    v
+Violation Reported
+    |
+    v
+Workload Still Admitted
+21. Enforce Mode
 
-This demonstrates the audit-before-enforce workflow.
-
-9.2 Enforce Mode
-
-The same policy was changed to:
+The policy was changed to:
 
 validationFailureAction: Enforce
 
-The violating workload was then rejected.
+The same insecure workload configuration was tested again.
+
+Result:
+
+REJECTED
 
 Expected message:
 
 hostNetwork is not allowed for standard workloads.
-9.3 Policy Exception
+
+This demonstrated:
+
+Audit
+  |
+  v
+Review violations
+  |
+  v
+Remediate
+  |
+  v
+Enforce
+  |
+  v
+Reject violations
+22. Policy Exception
 
 A scoped PolicyException manifest was created:
 
 exceptions/host-network-exception.yaml
 
-The intended exception scope was limited to:
+The intended scope was limited to:
 
-Policy: audit-host-network
-Rule: disallow-host-network
-Namespace: default
-Resource: host-network-exception
-Exception Limitation
+Policy:
+audit-host-network
 
-During testing, Kyverno reported:
+Rule:
+disallow-host-network
+
+Namespace:
+default
+
+Resource:
+host-network-exception
+Configuration Limitation
+
+During testing Kyverno reported:
 
 The exceptionNamespace flag is not set
 
-Therefore, this project does not claim that the PolicyException successfully bypassed the admission policy.
+Therefore, the project does not claim a successful runtime PolicyException bypass.
 
-The limitation is intentionally documented rather than represented as a successful test.
+The exception configuration limitation was documented in the security report.
 
-Stage 4 Result
-[✓] Audit mode demonstrated
-[✓] PolicyReport violation observed
-[✓] Policy changed to Enforce
-[✓] Violating workload rejected
-[✓] Scoped exception manifest created
-[!] Exception namespace configuration remains a documented limitation
+This is intentionally reported as a limitation instead of being represented as a successful test.
 
-Stage 4: COMPLETE with documented exception limitation
+Result:
 
-10. Stage 5 — CI Policy Validation
+Stage 4: COMPLETE
+with documented PolicyException limitation
+23. Stage 5 — CI Policy Validation
 Objective
 
-Validate Kubernetes manifests before deployment using CI.
+Validate Kubernetes manifests against the security policies before deployment.
 
 GitHub Actions workflow:
 
@@ -496,9 +590,9 @@ Test manifests:
 
 ci/test-manifests/violation.yaml
 ci/test-manifests/compliant.yaml
-10.1 Violating Manifest
+24. CI Violating Manifest
 
-The CI test contains multiple policy violations, including:
+The violating manifest contains security-policy violations including:
 
 image: nginx:latest
 
@@ -506,25 +600,43 @@ and:
 
 privileged: true
 
-as well as missing resource configuration.
+and missing required resource configuration.
 
-The CI workflow expects this manifest to fail policy validation.
+The CI workflow expects the manifest to fail policy validation.
 
-10.2 Compliant Manifest
+Expected behavior:
 
-The compliant manifest uses:
+Violation
+   |
+   v
+Kyverno CLI
+   |
+   v
+CI FAIL
+25. CI Compliant Manifest
+
+The compliant manifest contains:
 
 runAsNonRoot: true
 drop ALL capabilities
-CPU requests and limits
-Memory requests and limits
+CPU requests
+CPU limits
+Memory requests
+Memory limits
 versioned ECR image
 required labels
 non-privileged container
 
-The workflow expects this manifest to pass.
+Expected behavior:
 
-11. GitHub Actions Evidence
+Compliant
+   |
+   v
+Kyverno CLI
+   |
+   v
+CI PASS
+26. GitHub Actions Result
 
 Workflow:
 
@@ -542,13 +654,13 @@ Result:
 
 SUCCESS
 
-The GitHub Actions workflow successfully executed the Kubernetes manifest policy validation.
+The GitHub Actions workflow successfully executed the policy-validation job.
 
-The evidence screenshot is included in the project/report documentation.
+Evidence was captured and included in the project documentation.
 
-12. Stage 5 — Admission Monitoring
+27. Stage 5 — Admission Monitoring
 
-Kyverno exposes metrics through:
+Kyverno metrics were exposed through:
 
 kyverno-svc-metrics
 
@@ -556,111 +668,117 @@ Port:
 
 8000
 
-The metrics endpoint provides observability into Kyverno policy execution and admission activity.
+The metrics layer provides visibility into Kyverno policy execution and admission activity.
 
-The project uses the Kyverno metrics layer to support monitoring of:
+Monitoring can be used to observe:
 
 Admission activity
 Allowed requests
 Rejected requests
 Policy execution results
 Policy violations
-13. Rejection Spike Alert Demonstration
+28. Rejection Spike Alert
 
-File:
+The project contains:
 
 ci/check-rejection-spike.ps1
 
-The demonstration threshold is:
+Configured demonstration threshold:
 
 3 rejected requests
-Alert Condition
+Alert Test
 
-Test:
+Input:
 
-Rejected requests: 3
+Rejected Requests: 3
 Threshold: 3
 
 Result:
 
 ALERT: Kyverno admission rejection spike detected.
-Normal Condition
+Normal Condition Test
 
-Test:
+Input:
 
-Rejected requests: 1
+Rejected Requests: 1
 Threshold: 3
 
 Result:
 
 OK: Rejection rate is below the alert threshold.
 
-This demonstrates both:
+This demonstrates both alert and normal conditions.
 
-Normal condition
-       |
-       v
-      OK
+29. Monitoring Limitation
 
-and:
+The PowerShell alert script demonstrates the rejection threshold logic.
 
-Rejection spike
-       |
-       v
-     ALERT
-Important Monitoring Limitation
+It does not itself provide long-term metric storage or historical analysis.
 
-The PowerShell script demonstrates the alert threshold logic. It does not itself collect historical metrics from Prometheus.
+Kyverno's metrics endpoint can be integrated with a production monitoring stack such as Prometheus and Grafana.
 
-Kyverno's native metrics endpoint is available for integration with a production monitoring system such as Prometheus/Grafana.
+The project therefore claims:
 
-14. Combined CI + Admission Guardrail
+[✓] Kyverno metrics exposure
+[✓] Rejection monitoring capability
+[✓] Alert threshold logic
+[✓] Alert trigger demonstration
 
-The project implements two independent security checkpoints.
+It does not claim:
 
-Checkpoint 1 — CI
+[ ] Full Prometheus-based production alerting
+30. Combined CI + Admission Guardrail
+
+The completed design provides two independent checkpoints.
+
+CI Check
 Developer
-   |
-   v
-Pull Request
-   |
-   v
+    |
+    v
+GitHub Pull Request
+    |
+    v
 GitHub Actions
-   |
-   v
+    |
+    v
 Kyverno Policy Validation
-   |
-   +---- violation ----> CI FAIL
-   |
-   +---- compliant ----> CI PASS
-Checkpoint 2 — Cluster Admission
+    |
+    +---- Violation ----> FAIL
+    |
+    +---- Compliant ----> PASS
+Cluster Check
 Deployment
-   |
-   v
+    |
+    v
 Kubernetes API Server
-   |
-   v
+    |
+    v
 Kyverno Admission Controller
-   |
-   +---- violation ----> REQUEST DENIED
-   |
-   +---- compliant ----> REQUEST ACCEPTED
+    |
+    +---- Violation ----> DENY
+    |
+    +---- Compliant ----> ALLOW
 
-This creates a defense-in-depth policy model.
+Therefore:
 
-Even if a policy violation reaches the deployment stage after passing through development tooling, Kubernetes admission control provides a second enforcement layer.
-
-15. Security Controls Summary
+CI Guardrail
+      +
+Admission Guardrail
+      =
+Defense in Depth
+31. Security Controls Summary
 Security Control	Implemented	Tested
 Kyverno admission controller	Yes	Yes
 Privileged container prevention	Yes	Yes
 Require non-root	Yes	Yes
-Drop all capabilities	Yes	Yes
-Resource requests/limits	Yes	Yes
+Drop Linux capabilities	Yes	Yes
+Resource requests	Yes	Yes
+Resource limits	Yes	Yes
 Disallow latest tag	Yes	Yes
-Required labels	Yes	Yes
+Required app label	Yes	Yes
+Required environment label	Yes	Yes
 Approved ECR registry	Yes	Yes
-Public image rejection	Yes	Yes
+Public registry rejection	Yes	Yes
 ECR scan-on-push	Yes	Yes
 Scan-result admission blocking	No	N/A
 Image signature admission blocking	No	N/A
@@ -672,92 +790,89 @@ CI validation	Yes	Yes
 GitHub Actions	Yes	Yes
 Kyverno metrics	Yes	Yes
 Rejection alert logic	Yes	Yes
-Runtime security enforcement	No	Outside admission scope
-16. Pod Security Standards Mapping
+Runtime security	Outside scope	N/A
+32. Pod Security Standards Mapping
 
-The implemented policies provide controls that correspond to common Kubernetes Pod Security Standard requirements.
+The implemented policies provide controls corresponding to common Kubernetes Pod Security requirements.
 
-Examples include:
+Examples:
 
 Privileged container prevention
         |
         v
-Pod privilege restriction
-
+Container privilege restriction
 runAsNonRoot
         |
         v
 Non-root execution
-
 Drop ALL capabilities
         |
         v
 Linux capability restriction
 
-Kubernetes Pod Security Admission provides the standardized:
+Kubernetes Pod Security Admission provides standardized security levels:
 
 Privileged
 Baseline
 Restricted
 
-security levels.
+Kyverno was used in this project to provide custom Policy-as-Code controls and admission enforcement.
 
-This project uses Kyverno for custom policy-as-code enforcement while recognizing Kubernetes Pod Security Admission as a built-in security mechanism.
+33. Policy-as-Code Design
 
-17. Policy-as-Code Principles
+The project follows Policy-as-Code principles.
 
-The project follows these principles:
+Version Controlled Policies
 
-Version Control
-
-Policies are stored in Git:
+Policies are stored under:
 
 policies/
-Reviewable Changes
+Git-Based Changes
 
-Policy changes are committed through Git and can be reviewed before deployment.
+Security policy changes are committed to Git.
 
 CI Validation
 
-Kubernetes manifests are validated through:
+Manifests are validated through:
 
 .github/workflows/policy-validation.yaml
 Admission Enforcement
 
-Kyverno independently validates workloads at cluster admission.
+Kyverno independently validates resources at Kubernetes admission time.
 
 Audit Before Enforcement
 
-New restrictive policies can initially be introduced in Audit mode before moving to Enforce.
+New policies can first be introduced in Audit mode.
 
 Scoped Exceptions
 
-Exceptions are intended to be narrowly scoped rather than globally disabling security controls.
+Exceptions are intended to be narrowly scoped and documented.
 
-18. Operational Runbook
+34. Operational Runbook
 
-The operational runbook is available at:
+The deployment troubleshooting runbook is located at:
 
 docs/runbook.md
 
-The runbook covers:
+It covers:
 
-Identifying admission rejection
-Finding the responsible Kyverno policy
-Reviewing PolicyReports
-Correcting workload configuration
-Handling legitimate exceptions
-Audit-before-enforce rollout
-Policy-related deployment failures
-Rollback and outage safety
-Runtime security limitations
-19. Security Research
+Identifying admission rejection.
+Finding the responsible Kyverno policy.
+Reviewing PolicyReports.
+Checking Kubernetes events.
+Correcting workload configuration.
+Handling legitimate exceptions.
+Audit-before-enforce rollout.
+Policy-related deployment failures.
+Rollback and outage safety.
+Runtime security limitations.
+35. Security Research
 
-The research document is available at:
+The research document is:
 
 docs/research.md
 
-The research compares:
+It compares:
 
 Kyverno
 OPA Gatekeeper
@@ -768,32 +883,32 @@ Comparison areas include:
 Admission enforcement
 Policy language
 Custom policy capability
-Audit functionality
+Audit capability
 CI integration
 Exceptions
 Kubernetes integration
 Operational model
 
-No performance ranking or benchmark claim is made because this project did not perform controlled benchmarks under identical conditions.
+No performance ranking is claimed because controlled benchmarks were not performed under identical conditions.
 
-20. Runtime Security Limitation
+36. Runtime Security Limitation
 
-Admission control is a preventive control.
+Admission control is a preventive security control.
 
 It evaluates Kubernetes resources when they are created or updated.
 
 It cannot guarantee that an already-admitted workload remains secure during runtime.
 
-Examples of threats that policy-as-code alone cannot completely prevent:
+Examples include:
 
 Application vulnerability exploitation
-Malicious code execution inside a permitted container
-Credential theft after compromise
+Malicious code execution
+Credential theft
 Unexpected outbound communication
 Compromised dependencies
 Runtime lateral movement
 
-Additional runtime controls may include:
+Additional runtime security controls may include:
 
 Vulnerability management
 Runtime threat detection
@@ -803,13 +918,23 @@ Container isolation
 Monitoring
 Alerting
 Incident response
-21. Client-Facing Security Statement
+
+Therefore:
+
+Admission Security
+        +
+Runtime Security
+        +
+Operational Security
+        =
+Defense in Depth
+37. Client-Facing Security Statement
 
 This platform enforces Kubernetes security requirements before and during deployment. CI policy validation detects non-compliant manifests before deployment, while Kyverno admission control independently blocks workloads that violate enforced policies. Registry restrictions reduce the risk of deploying images from unapproved sources. These controls provide strong preventive guardrails for configuration and admission-time risks, but they do not guarantee runtime security. An already-admitted workload can still contain exploitable application vulnerabilities or behave maliciously after deployment, so runtime monitoring, vulnerability management, network controls, least privilege, and incident response remain necessary.
 
-22. AWS Resources
+38. AWS Resource Cleanup
 
-The temporary laboratory environment used:
+Temporary AWS resources used for this project included:
 
 EKS Cluster:
 k8s-policy-as-code
@@ -820,193 +945,267 @@ policy-workers
 ECR Repository:
 k8s-policy-demo
 
-AWS Region:
-ap-south-1
+The cleanup process was completed after testing.
 
-The ECR repository was deleted after testing.
+ECR
 
-The EKS node group was subsequently scheduled for deletion before removing the EKS cluster.
+The ECR repository was deleted successfully.
 
-23. Cleanup Procedure
+Verification returned:
 
-After completing testing:
+RepositoryNotFoundException
+EKS Node Group
 
-aws eks delete-nodegroup `
-  --cluster-name k8s-policy-as-code `
-  --nodegroup-name policy-workers `
-  --region ap-south-1
+The managed node group:
 
-Wait:
+policy-workers
 
-aws eks wait nodegroup-deleted `
-  --cluster-name k8s-policy-as-code `
-  --nodegroup-name policy-workers `
-  --region ap-south-1
+was deleted before deleting the EKS cluster.
 
-Then delete the cluster:
+EKS Cluster
 
-aws eks delete-cluster `
-  --name k8s-policy-as-code `
-  --region ap-south-1
+The EKS cluster:
 
-Wait:
+k8s-policy-as-code
 
-aws eks wait cluster-deleted `
-  --name k8s-policy-as-code `
-  --region ap-south-1
+was then deleted.
 
-Verify:
-
-aws eks describe-cluster `
-  --name k8s-policy-as-code `
-  --region ap-south-1
-
-The expected final state is:
+Final verification returned:
 
 ResourceNotFoundException
 
-ECR verification:
+indicating that the cluster no longer existed.
 
-aws ecr describe-repositories `
-  --repository-names k8s-policy-demo `
-  --region ap-south-1
+39. Cleanup Architecture
 
-Expected:
+The cleanup sequence was:
 
-RepositoryNotFoundException
-24. Evidence
+Running EKS Cluster
+        |
+        v
+Delete Node Group
+        |
+        v
+Node Group Deleted
+        |
+        v
+Delete EKS Cluster
+        |
+        v
+Cluster Deleted
+        |
+        v
+Verify ResourceNotFound
 
-Evidence is maintained through:
+ECR was separately removed after image testing.
+
+40. Evidence
+
+Evidence is maintained under:
 
 docs/screenshots/
 
-Important evidence includes:
+Evidence includes:
 
 Kyverno installation
 Privileged workload rejection
 Compliant workload admission
-Stage 2 policy rejection tests
+Stage 2 policy testing
 Public image rejection
 Approved ECR image admission
 Audit-mode PolicyReport
 Enforce-mode rejection
 GitHub Actions CI success
-Monitoring/alert demonstration
-AWS resource cleanup
+Monitoring/alert testing
+AWS cleanup
 
-Screenshots should not expose:
+The GitHub Actions success screenshot demonstrates:
 
-AWS account IDs
-Access keys
-Secret credentials
-Passwords
-Private tokens
-Sensitive infrastructure information
-25. Git History
+Workflow:
+Kyverno Policy Validation
+
+Job:
+Validate Kubernetes manifests
+
+Commit:
+57f9a46
+
+Result:
+Success
+41. Documentation Delivered
+
+The project contains:
+
+docs/cluster-security-report.md
+
+Detailed implementation and security status report.
+
+docs/research.md
+
+Kyverno vs OPA Gatekeeper vs Kubernetes PSA research.
+
+docs/runbook.md
+
+Operational troubleshooting and deployment-failure runbook.
+
+docs/stage5.md
+
+CI, monitoring, alerting and combined guardrail documentation.
+
+42. Git Repository
+
+Repository:
+
+https://github.com/saakibsheikh1/k8s-policy-as-code
+
+Primary branch:
+
+main
+
+Final repository state:
+
+Branch: main
+Remote: origin/main
+Working tree: clean
+43. Important Git Commits
 
 Major implementation milestones include:
 
 Stage 1
 feat: add privileged container admission policy
-
 Stage 3
 feat: enforce approved ECR image registry
-
 Stage 5 CI
 57f9a46
 feat: add CI policy validation
-
 Stage 5 Documentation
 feat: complete CI monitoring and admission alert controls
-
 Documentation
 docs: complete security research runbook and cluster report
+44. Final Completion Matrix
+Area	Status
+EKS security environment	COMPLETE
+Kyverno installation	COMPLETE
+Admission control	COMPLETE
+Privileged workload prevention	COMPLETE
+Non-root enforcement	COMPLETE
+Capability restriction	COMPLETE
+Resource enforcement	COMPLETE
+Image tag restriction	COMPLETE
+Required labels	COMPLETE
+Approved registry enforcement	COMPLETE
+Public image rejection	COMPLETE
+ECR scan-on-push configuration	COMPLETE
+Audit mode	COMPLETE
+Enforce mode	COMPLETE
+PolicyReports	COMPLETE
+PolicyException manifest	COMPLETE*
+CI policy validation	COMPLETE
+GitHub Actions	COMPLETE
+Kyverno metrics	COMPLETE
+Rejection-spike alert demonstration	COMPLETE
+Combined CI + admission guardrail	COMPLETE
+Research documentation	COMPLETE
+Operational runbook	COMPLETE
+Security report	COMPLETE
+AWS cleanup	COMPLETE
+Repository cleanup	COMPLETE
 
-All completed changes are maintained in the main branch.
+* PolicyException was created but its runtime bypass was not successfully exercised because the required exception namespace configuration was not set.
 
-26. Final Project Status
-Completed
-[✓] EKS security-policy environment
-[✓] Kyverno installation
-[✓] Privileged container admission control
-[✓] Non-root enforcement
-[✓] Capability restriction
-[✓] Resource requirements
-[✓] Latest image tag restriction
-[✓] Required labels
-[✓] Approved ECR registry
-[✓] Public image rejection
-[✓] ECR scan-on-push configuration
-[✓] Audit mode
-[✓] Enforce mode
-[✓] PolicyReports
-[✓] CI policy validation
-[✓] GitHub Actions
-[✓] Kyverno metrics exposure
-[✓] Rejection-spike alert demonstration
-[✓] Combined CI + admission guardrail
-[✓] Security research
-[✓] Operational runbook
-[✓] Cluster security report
-Documented Limitations
-[!] Image signature admission blocking not implemented
-[!] Vulnerability-scan-result admission blocking not implemented
-[!] PolicyException runtime bypass not successfully exercised
-[!] Alert script demonstrates threshold logic rather than Prometheus-based historical alerting
-[!] Runtime security is outside admission-policy scope
-Cleanup
-[✓] ECR repository deleted
-[~] EKS node group deletion in progress
-[ ] EKS cluster deletion after node group removal
-[ ] Final clean-account verification
-27. Conclusion
+45. Known Limitations
 
-This project demonstrates a defense-in-depth Kubernetes security model based on policy-as-code.
+The following limitations are intentionally documented.
 
-The security architecture combines:
+1. Image Signature Verification
 
-Git
- |
- +--> Version-controlled policies
- |
- +--> CI validation
- |
- +--> Kubernetes admission control
- |
- +--> PolicyReports
- |
- +--> Metrics
- |
- +--> Alerting
+Image signature verification was not implemented as an admission requirement.
 
-The resulting security workflow is:
+2. Vulnerability Scan Admission Blocking
 
-Write policy
-     |
-     v
-Commit to Git
-     |
-     v
-Validate through CI
-     |
-     v
-Deploy workload
-     |
-     v
-Kyverno admission control
-     |
-     +----------+
-     |          |
-     v          v
-   ALLOW      DENY
-     |          |
-     v          v
- Workload    Violation
+ECR scan-on-push was enabled, but scan findings were not used to reject Kubernetes workloads.
 
-The implementation provides preventive controls for common Kubernetes configuration and supply-chain risks while clearly documenting areas that require additional runtime security controls.
+3. PolicyException Configuration
 
-Project Author
+A PolicyException object was created, but Kyverno reported:
 
+The exceptionNamespace flag is not set
+
+Therefore a successful exception bypass is not claimed.
+
+4. Production Alerting
+
+The rejection-spike PowerShell script demonstrates alert logic.
+
+A complete production monitoring architecture would connect Kyverno metrics to a metrics backend and alerting system.
+
+5. Runtime Security
+
+Admission policies cannot completely protect already-running workloads from runtime exploitation or malicious behavior.
+
+46. Final Security Model
+
+The final security architecture can be summarized as:
+
+                    Git Repository
+                         |
+                         v
+                Version-Controlled
+                     Policies
+                         |
+                         v
+                GitHub Actions CI
+                         |
+              +----------+----------+
+              |                     |
+              v                     v
+          Compliant             Violation
+              |                     |
+              v                     v
+            PASS                   FAIL
+              |
+              v
+         Kubernetes
+              |
+              v
+          API Server
+              |
+              v
+           Kyverno
+              |
+        +-----+-----+
+        |           |
+        v           v
+      ALLOW        DENY
+        |           |
+        v           v
+    Workload     Violation
+        |           |
+        v           v
+    Runtime     Monitoring
+                  |
+                  v
+                Alert
+47. Final Result
+
+The project demonstrates a Kubernetes security framework based on Policy-as-Code with:
+
+✓ Preventive admission control
+✓ Pod security controls
+✓ Supply-chain registry restriction
+✓ Audit-before-enforce rollout
+✓ Policy reporting
+✓ CI validation
+✓ Admission monitoring
+✓ Rejection alert demonstration
+✓ Defense-in-depth guardrails
+✓ Security documentation
+✓ Operational runbook
+✓ AWS resource cleanup
+
+The implementation is designed to prevent common Kubernetes configuration and admission-time security problems while clearly identifying security areas that require additional runtime controls.
+
+48. Project Author
 Sakib Sheikh
 
 DevOps / Cloud Engineering Project
@@ -1015,13 +1214,33 @@ Technologies:
 
 AWS
 Amazon EKS
-Kyverno
 Kubernetes
-Docker
+Kyverno
 Amazon ECR
+Docker
 Git
 GitHub Actions
+Helm
 Policy-as-Code
 CI/CD
+Cloud Security
+Container Security
+49. Final Status
+========================================
+ KUBERNETES SECURITY & POLICY-AS-CODE
+========================================
 
-**One correction from the earlier report:** keep the README's status as **“substantially complete / cleanup in progress”** until the `policy-workers` deletion finishes and the EKS cluster itself is deleted. That keeps the repository evidence accurate.
+Implementation        : COMPLETE
+Documentation         : COMPLETE
+CI Validation         : COMPLETE
+Monitoring Demo       : COMPLETE
+Alert Demonstration   : COMPLETE
+AWS Cleanup           : COMPLETE
+Git Repository        : CLEAN
+Project Status        : COMPLETE
+========================================
+
+End of Project
+
+
+This version is the one I recommend using as the **final README** because it records the project as complete while still transparently preserving the two genuine limitations instead of overstating them.
