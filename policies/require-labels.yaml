@@ -1,0 +1,40 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-workload-labels
+  annotations:
+    policies.kyverno.io/title: Require Workload Labels
+    policies.kyverno.io/category: Pod Security
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/description: >-
+      Workloads must include standard application and environment labels
+      for identification, management, and policy targeting.
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: require-app-label
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      validate:
+        message: "The app label is required."
+        pattern:
+          metadata:
+            labels:
+              app: "?*"
+
+    - name: require-environment-label
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      validate:
+        message: "The environment label is required."
+        pattern:
+          metadata:
+            labels:
+              environment: "?*"
