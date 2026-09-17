@@ -1,0 +1,27 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-approved-registry
+  annotations:
+    policies.kyverno.io/title: Require Approved Container Registry
+    policies.kyverno.io/category: Supply Chain Security
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/description: >-
+      Container images must originate from the approved Amazon ECR
+      repository for this project.
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: approved-registry
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      validate:
+        message: "Images must come from the approved ECR registry."
+        foreach:
+          - list: "request.object.spec.containers"
+            pattern:
+              image: "495278513365.dkr.ecr.ap-south-1.amazonaws.com/k8s-policy-demo:*"
